@@ -1,43 +1,51 @@
-from fastapi import dFastAPI
-from pydantic import BaseModel
-import pickle
+from fastapi import FastAPI
+import joblib
 import pandas as pd
 
-app = FastAPI(title="Vehicle Traffic Prediction API")
+app = FastAPI(
+    title="Churn Prediction API",
+    description="Customer Churn Prediction",
+    version="1.0"
+)
 
-# Model load karne ka try karega. Nahi mila to dummy chalega
+# Load Model - supports both joblib and pickle
 try:
-    model = pickle.load(open("model.pkl", "rb"))
+    model = joblib.load("churn_model.pkl")
+    print("Model loaded via joblib")
 except:
-    model = None
-
-class TrafficInput(BaseModel):
-    junction: int
-    hour: int
-    day: int
-    is_holiday: int
+    import pickle
+    with open("churn_model.pkl", "rb") as f:
+        model = pickle.load(f)
+    print("Model loaded via pickle")
 
 @app.get("/")
-def read_root():
-    return {"message": "Traffic Prediction API is running"}
+def root():
+    return {
+        "status": "API is Live",
+        "model_loaded": True,
+        "message": "Go to /docs for testing"
+    }
 
 @app.post("/predict")
-def predict_traffic(data: TrafficInput):
-    if model is None:
-        # Dummy prediction agar model nahi hai
-        prediction = 150 + data.hour * 10 + data.junction * 5
-    else:
-        input_df = pd.DataFrame([data.dict()])
-        prediction = model.predict(input_df)[0]
-    
-    if prediction > 200:
-        congestion = "High"
-    elif prediction > 100:
-        congestion = "Medium"
-    else:
-        congestion = "Low"
-        
-    return {
-        "predicted_vehicle_count": int(prediction),
-        "congestion_level": congestion
-    }
+def predict_churn(data: dict):
+    """
+    Send your model features as JSON
+    Example: {"tenure": 12, "MonthlyCharges": 70.5,...}
+    """
+    try:
+        # Convert incoming json to dataframe
+        df = pd.DataFrame([data])
+        prediction = model.predict(df)
+        prediction_value = int(prediction[0])
+
+        result = "Customer will Churn" if prediction_value == 1 else "Customer will NOT Churn"
+
+        return {
+            "prediction": prediction_value,
+            "result": result
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "hint": "Make sure you are sending same columns as used in training"
+        }
